@@ -5,9 +5,12 @@
 # 用途: 定时爬取博客文章并更新 RSS Feed
 # 用法:
 #   手动运行: ./scripts/update_feed.sh
-#   或通过 crontab 自动调用
+#   容器内:   docker exec <容器> bash scripts/update_feed.sh --cron
+#   crontab:  自动调用（已配置 cron）
 #
-# 日志输出到: /var/log/infoget-crawl.log (cron模式) 或 标准输出 (手动模式)
+# 日志输出:
+#   --cron 模式: 追加到 /var/log/infoget-cron.log
+#   手动模式:    输出到标准输出
 # ============================================================
 
 set -euo pipefail
@@ -15,17 +18,22 @@ set -euo pipefail
 # ---------- 配置 ----------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-LOG_FILE="/var/log/infoget-crawl.log"
+CRON_MODE=false
+LOG_FILE="/var/log/infoget-cron.log"
 MODE="${INFOGET_MODE:-quick}"
-SERVER_HOST="${INFOGET_SERVER_HOST:-0.0.0.0}"
-SERVER_PORT="${INFOGET_SERVER_PORT:-8080}"
+
+# ---------- 参数解析 ----------
+for arg in "$@"; do
+    case "$arg" in
+        --cron) CRON_MODE=true ;;
+    esac
+done
 
 # ---------- 函数 ----------
 log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
     echo "$msg"
-    # 如果以 cron 方式运行（无终端），追加到日志文件
-    if [ ! -t 1 ]; then
+    if [ "$CRON_MODE" = true ]; then
         echo "$msg" >> "$LOG_FILE" 2>/dev/null || true
     fi
 }
@@ -98,9 +106,9 @@ main() {
                 return 1
             }
             # 如果服务器未运行，启动它
-            if ! curl -s "http://localhost:${SERVER_PORT}/health" &>/dev/null; then
+            if ! curl -s "http://localhost:8080/health" &>/dev/null; then
                 log "HTTP 服务器未运行，启动中..."
-                nohup python3 server.py --host "$SERVER_HOST" --port "$SERVER_PORT" &>/dev/null &
+                nohup python3 server.py --host 0.0.0.0 --port 8080 &>/dev/null &
                 sleep 3
             fi
         else
@@ -110,15 +118,24 @@ main() {
     fi
 
     # 验证 RSS Feed 是否已更新
-    if curl -s "http://localhost:${SERVER_PORT}/feed" | head -1 | grep -q "<?xml"; then
-        log "✅ RSS Feed 更新成功"
-    else
+    local retry=0
+    local max_retry=3
+    while [ $retry -lt $max_retry ]; do
+        sleep 2
+        if curl -sf "http://localhost:8080/feed" 2>/dev/null | head -1 | grep -q "<?xml"; then
+            log "✅ RSS Feed 更新成功"
+            break
+        fi
+        ((retry++))
+        log "⚠️  RSS Feed 验证中... 尝试 $retry/$max_retry"
+    done
+    if [ $retry -eq $max_retry ]; then
         log "⚠️  RSS Feed 验证失败，请检查日志"
     fi
 
     # 显示统计信息
     local stats
-    stats=$(curl -s "http://localhost:${SERVER_PORT}/api/stats" 2>/dev/null || echo "无法获取统计")
+    stats=$(curl -s "http://localhost:8080/api/stats" 2>/dev/null || echo "无法获取统计")
     log "统计信息: $stats"
 
     log "========== InfoGet 更新完成 =========="

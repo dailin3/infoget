@@ -128,30 +128,11 @@ initialize_data() {
     fi
 }
 
-# ---------- 设置定时任务 ----------
+# ---------- 提示容器内定时任务 ----------
 setup_cron() {
-    info "配置定时任务..."
-
-    local crontab_file="$DEPLOY_DIR/scripts/crontab.txt"
-    if [ -f "$crontab_file" ]; then
-        # 备份现有 crontab
-        crontab -l > /tmp/crontab_backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
-
-        # 安装新的 crontab（保留现有任务）
-        local existing
-        existing=$(crontab -l 2>/dev/null || echo "")
-        if echo "$existing" | grep -q "infoget"; then
-            warn "InfoGet 定时任务已存在，跳过安装"
-        else
-            {
-                echo "$existing"
-                cat "$crontab_file"
-            } | crontab -
-            info "✅ 定时任务已安装"
-        fi
-    else
-        warn "crontab.txt 不存在，跳过定时任务配置"
-    fi
+    info "定时任务已内置于 Docker 容器中，无需在宿主机配置"
+    info "查看容器内定时任务: docker exec infoget crontab -l"
+    info "查看容器内 Cron 日志: docker exec infoget cat /var/log/infoget-cron.log"
 }
 
 # ---------- 创建日志文件 ----------

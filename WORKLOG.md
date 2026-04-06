@@ -103,8 +103,21 @@
 - 完全隔离：每个测试使用独立临时数据库，不污染真实数据
 - 无网络请求：爬虫测试使用模拟HTML，服务器测试使用mock对象
 
+### 2026-04-06 18:30 Cron 迁移到容器内
+- 用户建议：cron 放到 Docker 容器内部，服务器无需额外配置
+- 实现方案：
+  - Dockerfile 安装 cron + curl
+  - 配置 /etc/cron.d/infoget（3 条定时任务）
+  - 创建 docker-entrypoint.sh 同时启动 cron + HTTP 服务器
+  - deploy.sh 移除宿主机 crontab 配置
+- 定时任务（容器内）:
+  - 每 6 小时快速更新
+  - 每天凌晨 3 点完整爬取
+  - 每周日凌晨 2 点输出统计
+- 验证通过：手动触发 + 自动验证（3 次重试）
+
 ### 2026-04-06 18:00 Docker 打包完成
-- Dockerfile: 多阶段构建(builder→tester→runner)，非root用户，健康检查
+- Dockerfile: 多阶段构建(builder→tester→runner)，cron内置，健康检查
 - docker-compose.yml: 数据持久化、端口映射、资源限制
 - .dockerignore: 排除不必要文件
 - 构建成功，镜像名: infoget-infoget
