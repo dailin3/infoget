@@ -1,0 +1,14 @@
+# Qwen Code Docs RSS Generator - 项目依赖
+# 安装命令: pip install -r requirements.txt
+
+# HTTP 请求库，用于爬取网页内容
+requests>=2.31.0
+
+# HTML/XML 解析库，用于从网页中提取数据
+beautifulsoup4>=4.12.0
+
+# HTML 解析器（BeautifulSoup 的依赖）
+lxml>=4.9.0
+
+# RSS/Atom Feed 生成库（可选，如果不可用会自动使用手动拼接）
+feedgen>=1.0.0
