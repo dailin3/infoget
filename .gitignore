@@ -1,0 +1,25 @@
+# 工作日志（隐私保护）
+WORKLOG.md
+notes/
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 构建产物
+dist/
+build/
+node_modules/
+__pycache__/
+
+# 环境变量
+.env
+.env.local
+*.env
