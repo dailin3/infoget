@@ -7,15 +7,21 @@ Qwen Code Docs 博客 RSS 生成器 - 主入口
 使用方法:
     # 默认模式：爬取列表页 + 访问每篇文章详情页（信息更完整）
     python main.py
-    
+
     # 快速模式：仅爬取列表页，不访问详情页（速度更快）
     python main.py --quick
-    
+
     # 指定输出文件路径
     python main.py --output my_feed.xml
-    
+
     # 调整请求延迟（秒）
     python main.py --delay 2.0
+
+    # 爬取完毕后启动本地服务器
+    python main.py --serve
+
+    # 快速模式 + 启动服务器（推荐）
+    python main.py --quick --serve
 
 依赖安装:
     pip install -r requirements.txt
@@ -46,29 +52,51 @@ def parse_args():
   python main.py --quick              # 快速模式（不访问详情页）
   python main.py --output feed.xml    # 指定输出文件名
   python main.py --delay 3            # 设置请求延迟为 3 秒
+  python main.py --quick --serve      # 快速模式 + 启动服务器
+  python main.py --serve --port 9000  # 启动服务器并指定端口
         """,
     )
-    
+
     parser.add_argument(
         "--quick",
         action="store_true",
         help="快速模式：仅爬取列表页，不访问文章详情页（速度更快，但信息可能不完整）",
     )
-    
+
     parser.add_argument(
         "--output", "-o",
         type=str,
         default="output/feed.xml",
         help="输出文件路径（默认: output/feed.xml）",
     )
-    
+
     parser.add_argument(
         "--delay", "-d",
         type=float,
         default=1.0,
         help="每次请求之间的延迟（秒），默认: 1.0",
     )
-    
+
+    parser.add_argument(
+        "--serve", "-s",
+        action="store_true",
+        help="爬取完成后自动启动本地 HTTP 服务器，可通过浏览器或 RSS 阅读器访问",
+    )
+
+    parser.add_argument(
+        "--server-port",
+        type=int,
+        default=8080,
+        help="服务器监听端口（默认: 8080，仅在 --serve 时生效）",
+    )
+
+    parser.add_argument(
+        "--server-host",
+        type=str,
+        default="0.0.0.0",
+        help="服务器绑定地址（默认: 0.0.0.0，仅在 --serve 时生效）",
+    )
+
     return parser.parse_args()
 
 
@@ -148,7 +176,27 @@ def main():
         print(f"   文章数量: {len(articles)}")
         print(f"   RSS 文件: {output_path}")
         print("=" * 60)
-        
+
+        # 如果指定了 --serve，启动本地服务器
+        if args.serve:
+            # 延迟导入，避免不需要时加载额外模块
+            from scraper.server import run_server
+
+            # 启动服务器（阻塞运行）
+            # 注：不注册信号处理器，让 KeyboardInterrupt 正常传播
+            try:
+                run_server(
+                    host=args.server_host,
+                    port=args.server_port,
+                    feed_path=args.output,
+                    block=True,
+                )
+            except Exception as e:
+                print(f"\n[错误] 服务器启动失败: {e}")
+                import traceback
+                traceback.print_exc()
+                return 1
+
         return 0
         
     except KeyboardInterrupt:

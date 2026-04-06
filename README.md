@@ -8,6 +8,7 @@
 - ✅ 提取文章标题、发布日期、作者、摘要、完整链接
 - ✅ 生成标准 RSS 2.0 格式 XML 文件
 - ✅ 支持两种模式：完整模式（访问详情页）和快速模式（仅列表页）
+- ✅ 内置本地 HTTP 服务器，可通过浏览器或 RSS 阅读器直接访问
 - ✅ 可配置请求延迟，礼貌爬取
 - ✅ 详细的代码注释，适合初级工程师理解
 
@@ -16,12 +17,14 @@
 ```
 .
 ├── main.py                    # 主入口文件
+├── server.py                  # 本地 HTTP 服务器启动脚本
 ├── requirements.txt           # Python 依赖
 ├── README.md                  # 项目说明
 ├── scraper/                   # 爬虫模块
 │   ├── __init__.py           # 模块初始化
 │   ├── scraper.py            # 博客爬虫实现
-│   └── rss_generator.py      # RSS 生成器
+│   ├── rss_generator.py      # RSS 生成器
+│   └── server.py             # HTTP 服务器核心模块
 └── output/                    # 输出目录
     └── feed.xml              # 生成的 RSS 文件（运行后生成）
 ```
@@ -36,15 +39,46 @@ pip install -r requirements.txt
 
 ### 2. 运行
 
-**完整模式**（推荐，信息更完整）：
+**爬取 + 生成 RSS**：
+
+完整模式（推荐，信息更完整）：
 ```bash
 python main.py
 ```
 
-**快速模式**（仅爬取列表页，速度更快）：
+快速模式（仅爬取列表页，速度更快）：
 ```bash
 python main.py --quick
 ```
+
+**启动本地 HTTP 服务器**：
+
+独立启动服务器（默认端口 8080）：
+```bash
+python server.py
+```
+
+指定端口：
+```bash
+python server.py --port 9000
+```
+
+爬取完成后自动启动服务器：
+```bash
+python main.py --quick --serve
+```
+
+### 3. 访问 RSS
+
+启动服务器后，可通过以下地址访问：
+
+| 地址 | 说明 |
+|------|------|
+| `http://127.0.0.1:8080/` | 状态页面（文章列表、统计信息） |
+| `http://127.0.0.1:8080/feed` | RSS 2.0 XML（用于 RSS 阅读器订阅） |
+| `http://127.0.0.1:8080/health` | 健康检查端点 |
+
+在 RSS 阅读器中添加订阅：`http://127.0.0.1:8080/feed`
 
 **指定输出文件**：
 ```bash
