@@ -87,4 +87,20 @@
 - [x] 修复 exists_count 列缺失问题（数据库迁移）
 - [x] 修复 server.py 缺少 --db 参数
 
+### 2026-04-06 17:50 完成全覆盖测试
+- 用户询问：测试写好了吗？→ 回答没有，立即补上
+- 用户选择：全覆盖测试（数据库、RSS生成器、爬虫解析、HTTP服务器端点）
+- 结果：82 个测试全部通过，用时 1.29 秒
+
+测试覆盖：
+- tests/test_database.py (27个)：建表、CRUD、增量更新、爬取记录、失败记录、线程安全
+- tests/test_rss_generator.py (15个)：RSS生成、版本合规性、XML转义、降级、边界情况
+- tests/test_scraper.py (14个)：Article序列化、URL日期提取、列表页解析、去重
+- tests/test_server.py (26个)：所有HTTP端点（有/无数据库）、404、RSS提取、响应发送
+
+技术要点：
+- 零额外依赖：仅使用 pytest + unittest.mock + BeautifulSoup4
+- 完全隔离：每个测试使用独立临时数据库，不污染真实数据
+- 无网络请求：爬虫测试使用模拟HTML，服务器测试使用mock对象
+
 ---
