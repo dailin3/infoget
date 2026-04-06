@@ -7,6 +7,10 @@
 1. GET /          → 返回 HTML 状态页面（文章列表、服务器状态）
 2. GET /feed      → 返回 RSS XML 内容（Content-Type: application/rss+xml）
 3. GET /health    → 返回健康检查 JSON（{"status": "ok"}）
+4. GET /api/stats → 返回综合统计信息
+5. GET /api/history → 返回爬取历史
+6. GET /api/articles → 返回文章列表（支持分页）
+7. GET /api/failures → 返回失败记录
 
 技术实现：
 - 仅使用 Python 标准库（http.server, json, os 等）
@@ -19,7 +23,14 @@ import os
 import re
 from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse
+from typing import Optional
+from urllib.parse import urlparse, parse_qs
+
+# 可选导入数据库模块
+try:
+    from .database import InfoGetDB
+except ImportError:
+    InfoGetDB = None
 
 
 class RSSFeedHandler(SimpleHTTPRequestHandler):
@@ -32,12 +43,13 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
     # RSS 文件默认路径（相对于项目根目录）
     DEFAULT_FEED_PATH = "output/feed.xml"
 
-    def __init__(self, *args, feed_path: str = None, **kwargs):
+    def __init__(self, *args, feed_path: str = None, db_path: str = None, **kwargs):
         """
         初始化请求处理器
 
         参数:
             feed_path: RSS 文件的绝对路径或相对路径
+            db_path: 数据库文件路径（可选）
         """
         # 路径遍历漏洞修复：验证 feed_path 必须在项目目录内
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,12 +57,21 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
             abs_feed_path = os.path.abspath(feed_path)
         else:
             abs_feed_path = os.path.abspath(os.path.join(project_root, self.DEFAULT_FEED_PATH))
-        
+
         # 确保路径在项目根目录内
         if not abs_feed_path.startswith(os.path.abspath(project_root)):
             raise ValueError(f"feed_path 必须在项目目录内: {feed_path}")
-        
+
         self.feed_path = abs_feed_path
+
+        # 初始化数据库连接（可选）
+        self.db: Optional[InfoGetDB] = None
+        if db_path and InfoGetDB is not None:
+            try:
+                self.db = InfoGetDB(db_path)
+            except Exception as e:
+                print(f"[服务器] 数据库初始化失败: {e}")
+
         super().__init__(*args, **kwargs)
 
     def do_GET(self):
@@ -65,6 +86,14 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
             self._serve_feed()
         elif path == "/health":
             self._serve_health()
+        elif path == "/api/stats":
+            self._serve_api_stats()
+        elif path == "/api/history":
+            self._serve_api_history()
+        elif path == "/api/articles":
+            self._serve_api_articles(parsed_path)
+        elif path == "/api/failures":
+            self._serve_api_failures()
         else:
             self._serve_404()
 
@@ -122,6 +151,107 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
     def _serve_health(self):
         """返回健康检查响应"""
         self._send_json({"status": "ok"})
+
+    def _serve_api_stats(self):
+        """返回综合统计信息"""
+        if not self.db:
+            self._send_json(
+                {"error": "数据库未启用", "hint": "启动服务器时指定 --db 参数"},
+                status=503,
+            )
+            return
+
+        try:
+            stats = self.db.get_stats()
+            self._send_json({"success": True, "data": stats})
+        except Exception as e:
+            self._send_json({"error": "获取统计信息失败", "detail": str(e)}, status=500)
+
+    def _serve_api_history(self):
+        """返回爬取历史"""
+        if not self.db:
+            self._send_json(
+                {"error": "数据库未启用", "hint": "启动服务器时指定 --db 参数"},
+                status=503,
+            )
+            return
+
+        try:
+            # 从查询参数获取 limit
+            parsed_path = urlparse(self.path)
+            params = parse_qs(parsed_path.query)
+            limit = int(params.get("limit", [20])[0])
+            limit = min(limit, 100)  # 最大 100 条
+
+            history = self.db.get_crawl_history(limit=limit)
+            self._send_json({"success": True, "data": history, "count": len(history)})
+        except Exception as e:
+            self._send_json({"error": "获取爬取历史失败", "detail": str(e)}, status=500)
+
+    def _serve_api_articles(self, parsed_path):
+        """返回文章列表（支持分页）"""
+        if not self.db:
+            self._send_json(
+                {"error": "数据库未启用", "hint": "启动服务器时指定 --db 参数"},
+                status=503,
+            )
+            return
+
+        try:
+            # 解析查询参数
+            params = parse_qs(parsed_path.query)
+            page = int(params.get("page", [1])[0])
+            page_size = int(params.get("page_size", [50])[0])
+            order_by = params.get("order_by", ["pub_date DESC"])[0]
+
+            # 限制 page_size
+            page_size = min(page_size, 200)
+            page = max(page, 1)
+
+            # 获取文章总数
+            total = self.db.get_article_count()
+
+            # 获取文章列表
+            articles = self.db.get_all_articles(order_by=order_by)
+
+            # 手动分页
+            start = (page - 1) * page_size
+            end = start + page_size
+            paginated_articles = articles[start:end]
+
+            self._send_json({
+                "success": True,
+                "data": {
+                    "articles": paginated_articles,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": (total + page_size - 1) // page_size if page_size > 0 else 0,
+                }
+            })
+        except Exception as e:
+            self._send_json({"error": "获取文章列表失败", "detail": str(e)}, status=500)
+
+    def _serve_api_failures(self):
+        """返回失败记录"""
+        if not self.db:
+            self._send_json(
+                {"error": "数据库未启用", "hint": "启动服务器时指定 --db 参数"},
+                status=503,
+            )
+            return
+
+        try:
+            # 从查询参数获取 limit
+            parsed_path = urlparse(self.path)
+            params = parse_qs(parsed_path.query)
+            limit = int(params.get("limit", [50])[0])
+            limit = min(limit, 200)  # 最大 200 条
+
+            failures = self.db.get_failures(limit=limit)
+            self._send_json({"success": True, "data": failures, "count": len(failures)})
+        except Exception as e:
+            self._send_json({"error": "获取失败记录失败", "detail": str(e)}, status=500)
 
     def _serve_404(self):
         """返回 404 错误页面"""
@@ -529,6 +659,7 @@ def create_server(
     host: str = "0.0.0.0",
     port: int = 8080,
     feed_path: str = None,
+    db_path: str = None,
 ) -> HTTPServer:
     """
     创建并配置 HTTP 服务器
@@ -537,6 +668,7 @@ def create_server(
         host: 绑定地址，默认 "0.0.0.0"
         port: 监听端口，默认 8080
         feed_path: RSS 文件路径，默认 "output/feed.xml"
+        db_path: 数据库文件路径（可选），启用数据库查询 API
 
     返回:
         配置好的 HTTPServer 实例
@@ -546,7 +678,7 @@ def create_server(
 
     # 创建处理器工厂函数
     def handler_factory(*args, **kwargs):
-        handler = RSSFeedHandler(*args, feed_path=feed_path, **kwargs)
+        handler = RSSFeedHandler(*args, feed_path=feed_path, db_path=db_path, **kwargs)
         handler.server.request_log = request_log
         return handler
 
@@ -561,6 +693,7 @@ def run_server(
     host: str = "0.0.0.0",
     port: int = 8080,
     feed_path: str = None,
+    db_path: str = None,
     block: bool = True,
 ) -> HTTPServer:
     """
@@ -570,12 +703,13 @@ def run_server(
         host: 绑定地址，默认 "0.0.0.0"
         port: 监听端口，默认 8080
         feed_path: RSS 文件路径，默认 "output/feed.xml"
+        db_path: 数据库文件路径（可选），启用数据库查询 API
         block: 是否阻塞运行，默认 True
 
     返回:
         运行中的 HTTPServer 实例
     """
-    server = create_server(host=host, port=port, feed_path=feed_path)
+    server = create_server(host=host, port=port, feed_path=feed_path, db_path=db_path)
 
     print(f"\n{'=' * 60}")
     print("🌐 RSS Feed 服务器已启动")
@@ -585,6 +719,13 @@ def run_server(
     print(f"   RSS Feed: http://127.0.0.1:{port}/feed")
     print(f"   健康检查: http://127.0.0.1:{port}/health")
     print(f"   Feed 文件: {feed_path or RSSFeedHandler.DEFAULT_FEED_PATH}")
+    if db_path:
+        print(f"   数据库: {db_path}")
+        print(f"   API 端点:")
+        print(f"     - GET /api/stats     综合统计")
+        print(f"     - GET /api/history   爬取历史")
+        print(f"     - GET /api/articles  文章列表")
+        print(f"     - GET /api/failures  失败记录")
     print(f"{'=' * 60}")
     print("按 Ctrl+C 停止服务器")
     print(f"{'=' * 60}\n")

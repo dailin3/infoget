@@ -7,6 +7,7 @@ Qwen Code Docs 博客爬虫
 1. 请求博客列表页面
 2. 解析 HTML，提取文章链接、标题、日期等信息
 3. 访问每篇文章详情页，获取完整信息（作者、摘要等）
+4. 支持数据库持久化，实现增量更新和去重
 """
 
 import re
@@ -17,6 +18,12 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+
+# 可选导入数据库模块
+try:
+    from .database import InfoGetDB
+except ImportError:
+    InfoGetDB = None
 
 
 class Article:
@@ -79,14 +86,28 @@ class QwenBlogScraper:
     # 博客列表页 URL
     BLOG_LIST_URL = "https://qwenlm.github.io/qwen-code-docs/zh/blog/"
     
-    def __init__(self, delay: float = 1.0):
+    def __init__(self, delay: float = 1.0, db_path: str = None, use_db: bool = True):
         """
         初始化爬虫
-        
+
         参数:
             delay: 每次请求之间的延迟（秒），避免对服务器造成压力
+            db_path: 数据库文件路径，如果为 None 则使用默认路径
+            use_db: 是否启用数据库持久化，默认 True
         """
         self.delay = delay
+        self.use_db = use_db and InfoGetDB is not None
+        self.db: Optional[InfoGetDB] = None
+
+        if self.use_db:
+            try:
+                self.db = InfoGetDB(db_path) if db_path else InfoGetDB()
+                print(f"[数据库] 已连接: {self.db.db_path}")
+            except Exception as e:
+                print(f"[警告] 数据库初始化失败，将禁用数据库功能: {e}")
+                self.use_db = False
+                self.db = None
+
         # 创建 Session 对象，复用 TCP 连接，提高性能
         self.session = requests.Session()
         # 设置 User-Agent，模拟浏览器访问
@@ -366,81 +387,172 @@ class QwenBlogScraper:
     def scrape(self, scrape_detail: bool = True) -> list[Article]:
         """
         执行爬取任务的主方法
-        
+
         参数:
             scrape_detail: 是否访问每篇文章的详情页获取更多信息
                           设为 False 可以加快爬取速度，但信息可能不完整
-                          
+
         返回:
             Article 对象列表
         """
         print("=" * 60)
         print("开始爬取 Qwen Code Docs 博客...")
         print("=" * 60)
-        
-        # 步骤 1：获取列表页
-        print("\n[步骤 1] 获取博客列表页...")
-        soup = self._fetch_page(self.BLOG_LIST_URL)
-        if not soup:
-            print("[错误] 无法获取列表页，请检查网络连接或 URL 是否正确")
-            return []
-        
-        # 步骤 2：解析列表页
-        print("\n[步骤 2] 解析列表页，提取文章链接...")
-        raw_articles = self._parse_list_page(soup)
-        print(f"  [结果] 共找到 {len(raw_articles)} 篇文章")
-        
-        if not raw_articles:
-            print("[警告] 未找到文章，可能是页面结构发生变化")
-            # 输出部分 HTML 帮助调试
-            print(f"  [调试] 页面标题: {soup.title.string if soup.title else '未知'}")
-            return []
-        
-        # 步骤 3：访问详情页（可选）
-        articles = []
-        if scrape_detail and len(raw_articles) > 0:
-            print(f"\n[步骤 3] 访问每篇文章详情页，获取完整信息...")
-            for i, raw in enumerate(raw_articles, 1):
-                print(f"\n  [{i}/{len(raw_articles)}] 处理: {raw['title'] or raw['url']}")
-                
-                # 创建 Article 对象
-                article = Article(
-                    title=raw["title"],
-                    url=raw["url"],
-                    pub_date=raw["date"],
-                    summary=raw["summary"],
-                    author=raw.get("author", ""),
-                )
-                
-                # 访问详情页
-                detail_soup = self._fetch_page(raw["url"])
-                if detail_soup:
-                    article = self._parse_article_detail(detail_soup, article)
-                
-                articles.append(article)
-                
-                # 礼貌延迟，避免对服务器造成压力
-                if i < len(raw_articles):
-                    time.sleep(self.delay)
-        else:
-            # 不访问详情页，直接使用列表页信息
-            print("\n[步骤 3] 跳过详情页，使用列表页信息...")
-            for raw in raw_articles:
-                article = Article(
-                    title=raw["title"],
-                    url=raw["url"],
-                    pub_date=raw["date"],
-                    summary=raw["summary"],
-                    author=raw.get("author", ""),
-                )
-                articles.append(article)
-        
-        print(f"\n{'=' * 60}")
-        print(f"爬取完成！共获取 {len(articles)} 篇文章")
-        print(f"{'=' * 60}")
-        
-        return articles
+
+        # 记录爬取开始时间
+        start_time = time.time()
+        crawl_id = None
+        mode = "full" if scrape_detail else "quick"
+
+        # 如果启用数据库，创建爬取记录
+        if self.use_db and self.db:
+            crawl_id = self.db.begin_crawl(mode=mode)
+            print(f"[数据库] 爬取记录 ID: {crawl_id}")
+
+        # 统计信息
+        stats = {
+            "total_found": 0,
+            "new_count": 0,
+            "updated_count": 0,
+            "exists_count": 0,
+            "failed_count": 0,
+        }
+
+        try:
+            # 步骤 1：获取列表页
+            print("\n[步骤 1] 获取博客列表页...")
+            soup = self._fetch_page(self.BLOG_LIST_URL)
+            if not soup:
+                print("[错误] 无法获取列表页，请检查网络连接或 URL 是否正确")
+                if self.use_db and self.db and crawl_id:
+                    duration = time.time() - start_time
+                    self.db.finish_crawl(crawl_id, status="failed",
+                                         error_detail="无法获取列表页", duration=duration)
+                return []
+
+            # 步骤 2：解析列表页
+            print("\n[步骤 2] 解析列表页，提取文章链接...")
+            raw_articles = self._parse_list_page(soup)
+            stats["total_found"] = len(raw_articles)
+            print(f"  [结果] 共找到 {len(raw_articles)} 篇文章")
+
+            if not raw_articles:
+                print("[警告] 未找到文章，可能是页面结构发生变化")
+                print(f"  [调试] 页面标题: {soup.title.string if soup.title else '未知'}")
+                if self.use_db and self.db and crawl_id:
+                    duration = time.time() - start_time
+                    self.db.finish_crawl(crawl_id, status="success", duration=duration)
+                    self.db.update_crawl_stats(crawl_id, **stats)
+                return []
+
+            # 更新数据库统计
+            if self.use_db and self.db and crawl_id:
+                self.db.update_crawl_stats(crawl_id, total_found=stats["total_found"])
+
+            # 步骤 3：访问详情页（可选）
+            articles = []
+            if scrape_detail and len(raw_articles) > 0:
+                print(f"\n[步骤 3] 访问每篇文章详情页，获取完整信息...")
+                for i, raw in enumerate(raw_articles, 1):
+                    print(f"\n  [{i}/{len(raw_articles)}] 处理: {raw['title'] or raw['url']}")
+
+                    # 创建 Article 对象
+                    article = Article(
+                        title=raw["title"],
+                        url=raw["url"],
+                        pub_date=raw["date"],
+                        summary=raw["summary"],
+                        author=raw.get("author", ""),
+                    )
+
+                    # 访问详情页
+                    detail_soup = self._fetch_page(raw["url"])
+                    if detail_soup:
+                        article = self._parse_article_detail(detail_soup, article)
+
+                    # 如果启用数据库，保存或更新文章
+                    if self.use_db and self.db:
+                        try:
+                            result = self.db.upsert_article(article.to_dict())
+                            if result == "new":
+                                stats["new_count"] += 1
+                                print(f"    [数据库] ✅ 新增文章")
+                            elif result == "updated":
+                                stats["updated_count"] += 1
+                                print(f"    [数据库] 🔄 更新文章")
+                            else:
+                                stats["exists_count"] += 1
+                                print(f"    [数据库] ⏭️  已存在，跳过")
+                        except Exception as e:
+                            stats["failed_count"] += 1
+                            print(f"    [数据库] ❌ 保存失败: {e}")
+                            if crawl_id:
+                                self.db.add_failure(raw["url"], str(e), crawl_id)
+                    else:
+                        # 不启用数据库，直接添加到列表
+                        pass
+
+                    articles.append(article)
+
+                    # 礼貌延迟，避免对服务器造成压力
+                    if i < len(raw_articles):
+                        time.sleep(self.delay)
+            else:
+                # 不访问详情页，直接使用列表页信息
+                print("\n[步骤 3] 跳过详情页，使用列表页信息...")
+                for raw in raw_articles:
+                    article = Article(
+                        title=raw["title"],
+                        url=raw["url"],
+                        pub_date=raw["date"],
+                        summary=raw["summary"],
+                        author=raw.get("author", ""),
+                    )
+
+                    # 如果启用数据库，保存或更新文章
+                    if self.use_db and self.db:
+                        try:
+                            result = self.db.upsert_article(article.to_dict())
+                            if result == "new":
+                                stats["new_count"] += 1
+                            elif result == "updated":
+                                stats["updated_count"] += 1
+                            else:
+                                stats["exists_count"] += 1
+                        except Exception as e:
+                            stats["failed_count"] += 1
+                            if crawl_id:
+                                self.db.add_failure(raw["url"], str(e), crawl_id)
+
+                    articles.append(article)
+
+            # 爬取完成，更新数据库
+            duration = time.time() - start_time
+            if self.use_db and self.db and crawl_id:
+                # 确定最终状态
+                status = "success" if stats["failed_count"] == 0 else "partial"
+                self.db.finish_crawl(crawl_id, status=status, duration=duration)
+                self.db.update_crawl_stats(crawl_id, **stats)
+
+            print(f"\n{'=' * 60}")
+            print(f"爬取完成！共获取 {len(articles)} 篇文章")
+            if self.use_db:
+                print(f"  新增: {stats['new_count']} | 更新: {stats['updated_count']} | 已存在: {stats['exists_count']} | 失败: {stats['failed_count']}")
+                print(f"  耗时: {duration:.2f} 秒")
+            print(f"{'=' * 60}")
+
+            return articles
+
+        except Exception as e:
+            # 发生异常，记录失败
+            duration = time.time() - start_time
+            if self.use_db and self.db and crawl_id:
+                self.db.finish_crawl(crawl_id, status="failed",
+                                     error_detail=str(e), duration=duration)
+            raise
     
     def close(self):
-        """关闭 Session，释放资源"""
+        """关闭 Session 和数据库连接，释放资源"""
         self.session.close()
+        if self.db:
+            self.db.close()

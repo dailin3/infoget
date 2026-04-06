@@ -134,6 +134,13 @@ def parse_args():
         help="跳过 RSS 文件检查（不自动生成，直接启动）",
     )
 
+    parser.add_argument(
+        "--db",
+        type=str,
+        default="data/infoget.db",
+        help="SQLite 数据库路径（默认: data/infoget.db，留空 \"\" 禁用）",
+    )
+
     return parser.parse_args()
 
 
@@ -163,10 +170,12 @@ def main():
 
     # 启动服务器
     try:
+        db_path = args.db if args.db else None
         run_server(
             host=args.host,
             port=args.port,
             feed_path=args.feed,
+            db_path=db_path,
             block=True,
         )
         return 0

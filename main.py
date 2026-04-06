@@ -17,6 +17,9 @@ Qwen Code Docs 博客 RSS 生成器 - 主入口
     # 调整请求延迟（秒）
     python main.py --delay 2.0
 
+    # 指定数据库路径（启用持久化和增量更新）
+    python main.py --db data/infoget.db
+
     # 爬取完毕后启动本地服务器
     python main.py --serve
 
@@ -52,6 +55,8 @@ def parse_args():
   python main.py --quick              # 快速模式（不访问详情页）
   python main.py --output feed.xml    # 指定输出文件名
   python main.py --delay 3            # 设置请求延迟为 3 秒
+  python main.py --db data/infoget.db # 指定数据库路径
+  python main.py --db ""              # 禁用数据库功能
   python main.py --quick --serve      # 快速模式 + 启动服务器
   python main.py --serve --port 9000  # 启动服务器并指定端口
         """,
@@ -97,6 +102,13 @@ def parse_args():
         help="服务器绑定地址（默认: 0.0.0.0，仅在 --serve 时生效）",
     )
 
+    parser.add_argument(
+        "--db",
+        type=str,
+        default="data/infoget.db",
+        help="数据库文件路径（默认: data/infoget.db），用于持久化爬取记录和增量更新。设为空字符串可禁用数据库功能。",
+    )
+
     return parser.parse_args()
 
 
@@ -127,17 +139,25 @@ def main():
     """主函数"""
     # 解析命令行参数
     args = parse_args()
-    
+
+    # 处理数据库路径：空字符串表示禁用数据库
+    db_path = args.db if args.db else None
+    use_db = db_path is not None
+
     print("=" * 60)
     print("Qwen Code Docs 博客 RSS 生成器")
     print(f"运行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"模式: {'快速模式（仅列表页）' if args.quick else '完整模式（访问详情页）'}")
     print(f"输出: {args.output}")
     print(f"请求延迟: {args.delay}s")
+    if use_db:
+        print(f"数据库: {db_path}")
+    else:
+        print("数据库: 已禁用")
     print("=" * 60)
-    
+
     # 步骤 1：创建爬虫实例
-    scraper = QwenBlogScraper(delay=args.delay)
+    scraper = QwenBlogScraper(delay=args.delay, db_path=db_path, use_db=use_db)
     
     try:
         # 步骤 2：执行爬取
@@ -189,6 +209,7 @@ def main():
                     host=args.server_host,
                     port=args.server_port,
                     feed_path=args.output,
+                    db_path=db_path,
                     block=True,
                 )
             except Exception as e:

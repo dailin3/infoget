@@ -23,3 +23,11 @@ __pycache__/
 .env
 .env.local
 *.env
+
+# 运行时数据（数据库文件等）
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/*.db-shm
+data/*.db-wal
+!data/.gitkeep
