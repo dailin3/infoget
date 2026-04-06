@@ -1,0 +1,52 @@
+# ============================================================
+# InfoGet - Docker 构建忽略配置
+# ============================================================
+
+# ---------- Git ----------
+.git
+.gitignore
+
+# ---------- Python 缓存 ----------
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ---------- 测试 ----------
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---------- 文档 ----------
+ai-doc/
+*.md
+!README.md
+
+# ---------- 环境与安全 ----------
+.env
+.env.*
+*.pem
+*.key
+
+# ---------- 运行时生成（不需要打包） ----------
+data/*.db
+data/*.db-shm
+data/*.db-wal
+output/feed.xml
+output/*.xml
+
+# ---------- IDE & 编辑器 ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ---------- Docker 自身文件 ----------
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
+.dockerignore

@@ -103,4 +103,15 @@
 - 完全隔离：每个测试使用独立临时数据库，不污染真实数据
 - 无网络请求：爬虫测试使用模拟HTML，服务器测试使用mock对象
 
+### 2026-04-06 18:00 Docker 打包完成
+- Dockerfile: 多阶段构建(builder→tester→runner)，非root用户，健康检查
+- docker-compose.yml: 数据持久化、端口映射、资源限制
+- .dockerignore: 排除不必要文件
+- 构建成功，镜像名: infoget-infoget
+- 容器验证:
+  - 健康检查: GET /health → {"status": "ok"} ✅
+  - 统计API: GET /api/stats → 15篇文章，3次爬取 ✅
+  - 爬虫运行: 容器内执行 main.py --quick 成功 ✅
+  - RSS访问: GET /feed → 正常返回 RSS 2.0 XML ✅
+
 ---

@@ -1,0 +1,49 @@
+# ============================================================
+# InfoGet - Docker Compose 编排配置
+# ============================================================
+# 使用方法:
+#   docker compose up -d        # 后台启动
+#   docker compose logs -f      # 查看日志
+#   docker compose down         # 停止并移除容器
+#   docker compose exec infoget python main.py  # 进入容器运行爬虫
+# ============================================================
+
+services:
+  infoget:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: infoget
+    restart: unless-stopped
+
+    # 端口映射
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+    # 数据持久化：数据库和 RSS 文件挂载到宿主机
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+
+    # 环境变量（可在 .env 文件中配置）
+    environment:
+      - APP_PORT=${APP_PORT:-8080}
+      - DB_PATH=${DB_PATH:-data/infoget.db}
+      - FEED_PATH=${FEED_PATH:-output/feed.xml}
+
+    # 资源配置
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.50"
+        reservations:
+          memory: 64M
+          cpus: "0.10"
+
+    # 日志配置：限制日志文件大小，防止磁盘占满
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
