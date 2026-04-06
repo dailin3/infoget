@@ -63,4 +63,13 @@
 - 已修复所有严重问题和中等问题
 - 修复内容：html.escape() 转义、路径规范化验证、信号处理器冲突修复
 
+### 2026-04-06 17:16 修复 html 模块导入冲突
+- 用户反馈：访问 404 页面时出现 UnboundLocalError: local variable 'html' referenced before assignment
+- 根因分析：code-debugger 修复时虽然将 import html 移到了文件顶部，但多个方法内有 `html = ...` 赋值语句
+  - Python 将方法内的 `html` 视为局部变量，遮蔽了顶层的 `import html` 模块
+  - 导致在 f-string 中使用 `html.escape()` 时，html 被认为是未赋值的局部变量
+- 修复方案：将所有方法内的局部变量 `html` 重命名为 `html_content`
+- 涉及方法：_serve_index, _serve_404, _build_status_html
+- 测试验证：所有端点（/, /feed, /health, 404页面）均正常工作
+
 ---

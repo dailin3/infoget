@@ -73,8 +73,8 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
         try:
             # 读取 RSS 文件，解析文章信息
             if not os.path.exists(self.feed_path):
-                html = self._build_error_html("RSS 文件不存在", "请先运行爬虫生成 RSS Feed")
-                self._send_html(html, status=404)
+                html_content = self._build_error_html("RSS 文件不存在", "请先运行爬虫生成 RSS Feed")
+                self._send_html(html_content, status=404)
                 return
 
             # 读取 feed.xml 内容
@@ -85,12 +85,12 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
             articles = self._extract_articles_from_rss(feed_content)
 
             # 构建 HTML 页面
-            html = self._build_status_html(articles, feed_content)
-            self._send_html(html)
+            html_content = self._build_status_html(articles, feed_content)
+            self._send_html(html_content)
 
         except Exception as e:
-            html = self._build_error_html("服务器内部错误", str(e))
-            self._send_html(html, status=500)
+            html_content = self._build_error_html("服务器内部错误", str(e))
+            self._send_html(html_content, status=500)
 
     def _serve_feed(self):
         """返回 RSS XML 内容"""
@@ -125,7 +125,7 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
 
     def _serve_404(self):
         """返回 404 错误页面"""
-        html = f"""
+        html_content = f"""
         <!DOCTYPE html>
         <html lang="zh-CN">
         <head>
@@ -160,7 +160,7 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
         </body>
         </html>
         """
-        self._send_html(html, status=404)
+        self._send_html(html_content, status=404)
 
     def _extract_articles_from_rss(self, rss_content: str) -> list:
         """
@@ -261,7 +261,7 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
         else:
             articles_html = "<p class='no-articles'>暂无文章</p>"
 
-        html = f"""<!DOCTYPE html>
+        html_content = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -420,7 +420,7 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
     </div>
 </body>
 </html>"""
-        return html
+        return html_content
 
     def _build_error_html(self, title: str, message: str) -> str:
         """
