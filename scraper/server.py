@@ -29,8 +29,12 @@ from urllib.parse import urlparse, parse_qs
 # 可选导入数据库模块
 try:
     from .database import InfoGetDB
+    from .scraper import Article
+    from .rss_generator import RSSGenerator
 except ImportError:
     InfoGetDB = None
+    Article = None
+    RSSGenerator = None
 
 
 class RSSFeedHandler(SimpleHTTPRequestHandler):
@@ -122,25 +126,66 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
             self._send_html(html_content, status=500)
 
     def _serve_feed(self):
-        """返回 RSS XML 内容"""
+        """
+        返回 RSS XML 内容
+        ----------
+        优先从数据库动态生成 RSS（确保数据一致性）。
+        如果数据库未启用，降级为读取文件。
+        """
         try:
-            # 每次请求都重新读取文件，确保内容最新
-            if not os.path.exists(self.feed_path):
-                self._send_json(
-                    {"error": "RSS 文件不存在", "path": self.feed_path},
-                    status=404,
-                )
-                return
+            if self.db:
+                # 从数据库动态生成（唯一真实数据源）
+                articles_data = self.db.get_all_articles(order_by="pub_date DESC")
+                if not articles_data:
+                    self._send_json(
+                        {"error": "数据库中暂无文章", "hint": "请先运行爬虫爬取文章"},
+                        status=404,
+                    )
+                    return
 
-            with open(self.feed_path, "r", encoding="utf-8") as f:
-                feed_content = f.read()
+                # 将数据库记录转为 Article 对象
+                articles = []
+                for a in articles_data:
+                    articles.append(Article(
+                        title=a["title"],
+                        url=a["url"],
+                        pub_date=a["pub_date"],
+                        author=a.get("author", ""),
+                        summary=a.get("summary", ""),
+                    ))
+
+                # 动态生成 RSS
+                generator = RSSGenerator(
+                    title="Qwen Code Docs 博客",
+                    link="https://qwenlm.github.io/qwen-code-docs/zh/blog/",
+                    description="Qwen Code 官方文档博客文章的 RSS 订阅源",
+                    language="zh-CN",
+                    author="Qwen Team",
+                )
+                rss_content = generator.generate(articles)
+            else:
+                # 降级：读取文件（兼容无数据库模式）
+                if not os.path.exists(self.feed_path):
+                    self._send_json(
+                        {"error": "RSS 文件不存在", "path": self.feed_path},
+                        status=404,
+                    )
+                    return
+                with open(self.feed_path, "r", encoding="utf-8") as f:
+                    rss_content = f.read()
 
             # 设置正确的 Content-Type
             self.send_response(200)
             self.send_header("Content-Type", "application/rss+xml; charset=utf-8")
-            self.send_header("Content-Length", str(len(feed_content.encode("utf-8"))))
+            self.send_header("Content-Length", str(len(rss_content.encode("utf-8"))))
             self.end_headers()
-            self.wfile.write(feed_content.encode("utf-8"))
+            self.wfile.write(rss_content.encode("utf-8"))
+
+        except Exception as e:
+            self._send_json(
+                {"error": "获取 RSS 失败", "detail": str(e)},
+                status=500,
+            )
 
         except Exception as e:
             self._send_json(

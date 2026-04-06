@@ -24,9 +24,10 @@
 │   ├── __init__.py           # 模块初始化
 │   ├── scraper.py            # 博客爬虫实现
 │   ├── rss_generator.py      # RSS 生成器
+│   ├── database.py           # SQLite 数据库操作
 │   └── server.py             # HTTP 服务器核心模块
-└── output/                    # 输出目录
-    └── feed.xml              # 生成的 RSS 文件（运行后生成）
+└── data/                      # 运行时数据目录
+    └── infoget.db            # SQLite 数据库（唯一数据源）
 ```
 
 ## 快速开始
@@ -39,7 +40,7 @@ pip install -r requirements.txt
 
 ### 2. 运行
 
-**爬取 + 生成 RSS**：
+**爬取文章到数据库**：
 
 完整模式（推荐，信息更完整）：
 ```bash
@@ -58,11 +59,6 @@ python main.py --quick
 python server.py
 ```
 
-指定端口：
-```bash
-python server.py --port 9000
-```
-
 爬取完成后自动启动服务器：
 ```bash
 python main.py --quick --serve
@@ -75,22 +71,18 @@ python main.py --quick --serve
 | 地址 | 说明 |
 |------|------|
 | `http://127.0.0.1:8080/` | 状态页面（文章列表、统计信息） |
-| `http://127.0.0.1:8080/feed` | RSS 2.0 XML（用于 RSS 阅读器订阅） |
+| `http://127.0.0.1:8080/feed` | RSS 2.0 XML（从数据库动态生成） |
 | `http://127.0.0.1:8080/health` | 健康检查端点 |
+| `http://127.0.0.1:8080/api/stats` | 爬取统计信息 |
 
 在 RSS 阅读器中添加订阅：`http://127.0.0.1:8080/feed`
-
-**指定输出文件**：
-```bash
-python main.py --output my_feed.xml
-```
 
 **调整请求延迟**：
 ```bash
 python main.py --delay 2.0
 ```
 
-### 3. 查看帮助
+### 4. 查看帮助
 
 ```bash
 python main.py --help

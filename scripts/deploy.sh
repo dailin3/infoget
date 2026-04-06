@@ -117,43 +117,11 @@ start_services() {
 
 # ---------- 初始化数据 ----------
 initialize_data() {
-    info "首次爬取博客文章并写入数据库..."
+    info "首次爬取博客文章到数据库..."
 
     docker compose exec -T infoget python main.py --quick
     if [ $? -eq 0 ]; then
-        info "✅ 初始数据爬取成功，已写入数据库"
-
-        # 从数据库重新生成 RSS，确保一致性
-        info "从数据库重新生成 RSS Feed..."
-        docker compose exec -T infoget python -c "
-from scraper.database import InfoGetDB
-from scraper.rss_generator import RSSGenerator
-from scraper.scraper import Article
-
-db = InfoGetDB('data/infoget.db')
-articles_data = db.get_all_articles(order_by='pub_date DESC')
-# 过滤掉数据库字段 id、created_at、updated_at，只保留 Article 需要的字段
-articles = []
-for a in articles_data:
-    articles.append(Article(
-        title=a['title'],
-        url=a['url'],
-        pub_date=a['pub_date'],
-        author=a.get('author', ''),
-        summary=a.get('summary', ''),
-    ))
-
-gen = RSSGenerator(
-    title='Qwen Code Docs 博客',
-    link='https://qwenlm.github.io/qwen-code-docs/zh/blog/',
-    description='Qwen Code 官方文档博客文章的 RSS 订阅源',
-    language='zh-CN',
-    author='Qwen Team',
-)
-rss = gen.generate(articles)
-gen.save_to_file(rss, 'output/feed.xml')
-print(f'✅ 从数据库生成 RSS: {len(articles)} 篇文章')
-"
+        info "✅ 初始数据爬取成功，RSS 将从数据库动态生成"
     else
         warn "初始爬取失败，您可以稍后手动运行:"
         warn "  docker compose exec infoget python main.py --quick"

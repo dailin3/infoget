@@ -41,7 +41,6 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
 from scraper.scraper import QwenBlogScraper
-from scraper.rss_generator import RSSGenerator
 
 
 def parse_args():
@@ -66,13 +65,6 @@ def parse_args():
         "--quick",
         action="store_true",
         help="快速模式：仅爬取列表页，不访问文章详情页（速度更快，但信息可能不完整）",
-    )
-
-    parser.add_argument(
-        "--output", "-o",
-        type=str,
-        default="output/feed.xml",
-        help="输出文件路径（默认: output/feed.xml）",
     )
 
     parser.add_argument(
@@ -148,7 +140,6 @@ def main():
     print("Qwen Code Docs 博客 RSS 生成器")
     print(f"运行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"模式: {'快速模式（仅列表页）' if args.quick else '完整模式（访问详情页）'}")
-    print(f"输出: {args.output}")
     print(f"请求延迟: {args.delay}s")
     if use_db:
         print(f"数据库: {db_path}")
@@ -175,26 +166,12 @@ def main():
         
         # 步骤 3：打印预览
         print_articles(articles)
-        
-        # 步骤 4：生成 RSS
-        generator = RSSGenerator(
-            title="Qwen Code Docs 博客",
-            link="https://qwenlm.github.io/qwen-code-docs/zh/blog/",
-            description="Qwen Code 官方文档博客文章的 RSS 订阅源",
-            language="zh-CN",
-            author="Qwen Team",
-        )
-        
-        rss_content = generator.generate(articles)
-        
-        # 步骤 5：保存到文件
-        output_path = generator.save_to_file(rss_content, args.output)
-        
+
         # 完成
         print("\n" + "=" * 60)
         print("✅ 全部完成！")
         print(f"   文章数量: {len(articles)}")
-        print(f"   RSS 文件: {output_path}")
+        print("   文章已写入数据库，RSS 将从数据库动态生成")
         print("=" * 60)
 
         # 如果指定了 --serve，启动本地服务器
@@ -208,7 +185,6 @@ def main():
                 run_server(
                     host=args.server_host,
                     port=args.server_port,
-                    feed_path=args.output,
                     db_path=db_path,
                     block=True,
                 )
