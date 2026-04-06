@@ -147,11 +147,20 @@ python main.py --help
 
 ### 定时更新
 
-可以使用 cron 或 launchd 定时运行脚本：
+项目内置定时更新脚本，位于 `scripts/update_feed.sh`。
 
+**使用 cron 自动更新**：
 ```bash
-# 每天凌晨 2 点更新
-0 2 * * * cd /path/to/project && python main.py --quick
+# 安装定时任务
+crontab scripts/crontab.txt
+
+# 查看当前任务
+crontab -l
+```
+
+**手动更新**：
+```bash
+bash scripts/update_feed.sh
 ```
 
 ## 注意事项
@@ -183,6 +192,41 @@ python main.py --help
 - 支持增量更新（只爬取新文章）
 - 添加更多错误重试逻辑
 - 支持输出 Atom 格式
+
+## 服务器部署
+
+### 一键部署
+
+将项目上传到服务器后，运行：
+
+```bash
+# 以 root 身份运行
+sudo bash scripts/deploy.sh
+```
+
+脚本会自动：
+1. 检查并安装 Docker / Docker Compose（如未安装）
+2. 构建并启动服务
+3. 首次爬取博客文章
+4. 配置 cron 定时任务（每 6 小时更新）
+5. 设置日志文件
+
+### 手动部署
+
+```bash
+# 1. 上传项目到服务器
+scp -r InfoGet/ user@server:/opt/infoget/
+
+# 2. 在服务器上启动
+cd /opt/infoget
+docker compose up -d --build
+
+# 3. 生成初始数据
+docker compose exec infoget python main.py --quick
+
+# 4. 安装定时任务
+crontab scripts/crontab.txt
+```
 
 ## License
 

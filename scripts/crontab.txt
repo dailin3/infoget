@@ -1,0 +1,20 @@
+# InfoGet 定时任务配置
+# ============================================================
+# 安装方法:
+#   crontab scripts/crontab.txt
+#
+# 查看当前任务:
+#   crontab -l
+#
+# 删除所有任务:
+#   crontab -r
+# ============================================================
+
+# 每 6 小时更新一次 RSS Feed（0:00, 6:00, 12:00, 18:00）
+0 */6 * * * cd /opt/infoget && bash scripts/update_feed.sh >> /var/log/infoget-crawl.log 2>&1
+
+# 每天凌晨 3:00 完整爬取（访问文章详情页获取更多信息）
+0 3 * * * cd /opt/infoget && INFOGET_MODE=full bash scripts/update_feed.sh >> /var/log/infoget-crawl.log 2>&1
+
+# 每周日凌晨 2:00 输出一次完整统计
+0 2 * * 0 curl -s http://localhost:8080/api/stats >> /var/log/infoget-crawl.log 2>&1
