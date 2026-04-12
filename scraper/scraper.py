@@ -26,6 +26,16 @@ except ImportError:
     InfoGetDB = None
 
 
+def log(message: str):
+    """带时间戳的日志输出函数
+    
+    参数:
+        message: 日志消息内容
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {message}")
+
+
 class Article:
     """
     文章数据类
@@ -102,9 +112,9 @@ class QwenBlogScraper:
         if self.use_db:
             try:
                 self.db = InfoGetDB(db_path) if db_path else InfoGetDB()
-                print(f"[数据库] 已连接: {self.db.db_path}")
+                log(f"[数据库] 已连接: {self.db.db_path}")
             except Exception as e:
-                print(f"[警告] 数据库初始化失败，将禁用数据库功能: {e}")
+                log(f"[警告] 数据库初始化失败，将禁用数据库功能: {e}")
                 self.use_db = False
                 self.db = None
 
@@ -132,7 +142,7 @@ class QwenBlogScraper:
             BeautifulSoup 对象，如果请求失败则返回 None
         """
         try:
-            print(f"  [请求] {url}")
+            log(f"[请求] {url}")
             response = self.session.get(url, timeout=30)
             # 检查 HTTP 状态码
             response.raise_for_status()
@@ -140,7 +150,7 @@ class QwenBlogScraper:
             soup = BeautifulSoup(response.text, "lxml")
             return soup
         except requests.RequestException as e:
-            print(f"  [错误] 请求失败: {e}")
+            log(f"[错误] 请求失败: {e}")
             return None
     
     def _extract_date_from_url(self, url: str) -> str:
@@ -205,7 +215,7 @@ class QwenBlogScraper:
             links = soup.select(selector)
             if links:
                 article_links = links
-                print(f"  [信息] 使用选择器 '{selector}' 找到 {len(links)} 个链接")
+                log(f"[信息] 使用选择器 '{selector}' 找到 {len(links)} 个链接")
                 break
 
         # 去重：避免重复提取相同链接
@@ -396,7 +406,7 @@ class QwenBlogScraper:
             Article 对象列表
         """
         print("=" * 60)
-        print("开始爬取 Qwen Code Docs 博客...")
+        log("开始爬取 Qwen Code Docs 博客...")
         print("=" * 60)
 
         # 记录爬取开始时间
@@ -407,7 +417,7 @@ class QwenBlogScraper:
         # 如果启用数据库，创建爬取记录
         if self.use_db and self.db:
             crawl_id = self.db.begin_crawl(mode=mode)
-            print(f"[数据库] 爬取记录 ID: {crawl_id}")
+            log(f"[数据库] 爬取记录 ID: {crawl_id}")
 
         # 统计信息
         stats = {
@@ -423,7 +433,7 @@ class QwenBlogScraper:
             print("\n[步骤 1] 获取博客列表页...")
             soup = self._fetch_page(self.BLOG_LIST_URL)
             if not soup:
-                print("[错误] 无法获取列表页，请检查网络连接或 URL 是否正确")
+                log("[错误] 无法获取列表页，请检查网络连接或 URL 是否正确")
                 if self.use_db and self.db and crawl_id:
                     duration = time.time() - start_time
                     self.db.finish_crawl(crawl_id, status="failed",
@@ -434,11 +444,11 @@ class QwenBlogScraper:
             print("\n[步骤 2] 解析列表页，提取文章链接...")
             raw_articles = self._parse_list_page(soup)
             stats["total_found"] = len(raw_articles)
-            print(f"  [结果] 共找到 {len(raw_articles)} 篇文章")
+            log(f"[结果] 共找到 {len(raw_articles)} 篇文章")
 
             if not raw_articles:
-                print("[警告] 未找到文章，可能是页面结构发生变化")
-                print(f"  [调试] 页面标题: {soup.title.string if soup.title else '未知'}")
+                log("[警告] 未找到文章，可能是页面结构发生变化")
+                log(f"[调试] 页面标题: {soup.title.string if soup.title else '未知'}")
                 if self.use_db and self.db and crawl_id:
                     duration = time.time() - start_time
                     self.db.finish_crawl(crawl_id, status="success", duration=duration)
@@ -476,16 +486,16 @@ class QwenBlogScraper:
                             result = self.db.upsert_article(article.to_dict())
                             if result == "new":
                                 stats["new_count"] += 1
-                                print(f"    [数据库] ✅ 新增文章")
+                                log(f"[数据库] ✅ 新增文章")
                             elif result == "updated":
                                 stats["updated_count"] += 1
-                                print(f"    [数据库] 🔄 更新文章")
+                                log(f"[数据库] 🔄 更新文章")
                             else:
                                 stats["exists_count"] += 1
-                                print(f"    [数据库] ⏭️  已存在，跳过")
+                                log(f"[数据库] ⏭️  已存在，跳过")
                         except Exception as e:
                             stats["failed_count"] += 1
-                            print(f"    [数据库] ❌ 保存失败: {e}")
+                            log(f"[数据库] ❌ 保存失败: {e}")
                             if crawl_id:
                                 self.db.add_failure(raw["url"], str(e), crawl_id)
                     else:
@@ -535,10 +545,10 @@ class QwenBlogScraper:
                 self.db.update_crawl_stats(crawl_id, **stats)
 
             print(f"\n{'=' * 60}")
-            print(f"爬取完成！共获取 {len(articles)} 篇文章")
+            log(f"爬取完成！共获取 {len(articles)} 篇文章")
             if self.use_db:
-                print(f"  新增: {stats['new_count']} | 更新: {stats['updated_count']} | 已存在: {stats['exists_count']} | 失败: {stats['failed_count']}")
-                print(f"  耗时: {duration:.2f} 秒")
+                log(f"  新增: {stats['new_count']} | 更新: {stats['updated_count']} | 已存在: {stats['exists_count']} | 失败: {stats['failed_count']}")
+                log(f"  耗时: {duration:.2f} 秒")
             print(f"{'=' * 60}")
 
             return articles

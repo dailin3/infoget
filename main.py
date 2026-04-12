@@ -40,7 +40,7 @@ from datetime import datetime
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
-from scraper.scraper import QwenBlogScraper
+from scraper.scraper import QwenBlogScraper, log
 
 
 def parse_args():
@@ -107,9 +107,9 @@ def parse_args():
 def print_articles(articles):
     """打印爬取到的文章信息，方便调试和查看结果"""
     print("\n" + "=" * 60)
-    print("爬取结果预览:")
+    log("爬取结果预览:")
     print("=" * 60)
-    
+
     for i, article in enumerate(articles, 1):
         print(f"\n[{i}] {article.title or '无标题'}")
         print(f"    链接: {article.url}")
@@ -123,7 +123,7 @@ def print_articles(articles):
             if len(summary) > 100:
                 summary = summary[:100] + "..."
             print(f"    摘要: {summary}")
-    
+
     print("\n" + "=" * 60)
 
 
@@ -158,7 +158,7 @@ def main():
         
         # 检查是否爬取到文章
         if not articles:
-            print("\n[错误] 未爬取到任何文章，请检查:")
+            log("[错误] 未爬取到任何文章，请检查:")
             print("  1. 网络连接是否正常")
             print("  2. 目标网站是否可访问")
             print("  3. 页面结构是否发生变化")
@@ -197,10 +197,10 @@ def main():
         return 0
         
     except KeyboardInterrupt:
-        print("\n\n[中断] 用户取消了操作")
+        log("\n[中断] 用户取消了操作")
         return 1
     except Exception as e:
-        print(f"\n[错误] 发生未预期的异常: {e}")
+        log(f"\n[错误] 发生未预期的异常: {e}")
         import traceback
         traceback.print_exc()
         return 1

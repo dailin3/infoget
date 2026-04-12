@@ -65,7 +65,7 @@ def check_and_generate_feed(feed_path: str) -> bool:
             articles = scraper.scrape(scrape_detail=False)
 
             if not articles:
-                print("\n[错误] 爬虫未获取到文章，无法生成 RSS")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [错误] 爬虫未获取到文章，无法生成 RSS")
                 return False
 
             # 生成 RSS
@@ -80,14 +80,14 @@ def check_and_generate_feed(feed_path: str) -> bool:
             rss_content = generator.generate(articles)
             generator.save_to_file(rss_content, feed_path)
 
-            print(f"\n✅ RSS 文件生成成功: {feed_path}")
+            print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ✅ RSS 文件生成成功: {feed_path}")
             return True
 
         finally:
             scraper.close()
 
     except Exception as e:
-        print(f"\n[错误] 生成 RSS 文件失败: {e}")
+        print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [错误] 生成 RSS 文件失败: {e}")
         import traceback
         traceback.print_exc()
         return False

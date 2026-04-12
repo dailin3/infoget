@@ -74,7 +74,8 @@ class RSSFeedHandler(SimpleHTTPRequestHandler):
             try:
                 self.db = InfoGetDB(db_path)
             except Exception as e:
-                print(f"[服务器] 数据库初始化失败: {e}")
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                print(f"[{timestamp}] [服务器] 数据库初始化失败: {e}")
 
         super().__init__(*args, **kwargs)
 
